@@ -1,0 +1,175 @@
+\documentclass[a4paper,11pt]{article}
+%\documentclass[a4paper,11pt]{book}
+
+% macro for chinese
+\usepackage{CJKutf8}
+\begin{CJK}{UTF8}{gbsn}
+%\begin{CJK}{UTF8}{song}
+\CJKtilde
+
+% macro for header/footer
+\usepackage{fancyhdr}
+% macro for C stype
+\usepackage{listings}
+%这条命令可以让LaTeX排版时将C++键字突出显示
+\lstset{language=C}
+%这条命令可以让LaTeX自动将长的代码行换行排版
+\lstset{breaklines}
+%这一条命令可以解决代码跨页时，章节标题，页眉等汉字不显示的问题
+\lstset{extendedchars=false}
+
+%使除首段以外的段落，首行缩进，
+\usepackage{indentfirst}
+%缩进两个汉字距离的格式。
+\setlength{\parindent}{2em} 
+
+% define the title
+\author{arm小组}
+\title{S3C2440裸机模板文档}
+
+\begin{document}
+% generates the title
+\maketitle
+% header/footer
+\pagestyle{fancy}
+\lhead{学生电子爱好者协会}
+
+\newpage
+
+% insert the table of contents
+%\tableofcontents
+% 第一章
+\section{模板简介}
+工程模板下有三个目录，boot，include，source。
+\par
+boot目录下的start.S是S3C2440的启动代码，boot.lds是链接文件，lowlevel\_init.s是寄存器配置文件；include目录下是工程的全部头文件；source目录下是程序源代码。
+\par
+顶层目录和各级子目录中的Makefile是编译管理文件。
+
+% 1
+\subsection{编译模板}
+编译工程方法是在工程根目录下输入命令：
+\begin{lstlisting}
+	make all
+\end{lstlisting}
+\par
+根目录下会生成boot.bin和boot\_efl两个可执行文件，boot.bin即为用于烧写的裸机程序。
+\par
+同时还会生成boot.map和一些.o文件。boot.map保存着裸机程序的连接地址，调试程序会用到。.o文件是编译过程中生成的临时文件。
+\par
+编译后的工程目录会生成各种文件，目录会显得比较混乱；调整工程结构后，生成的临时文件还会影响工程的编译，所以有时需要清理工程目录，删除编译工程产生的所有输出文件。删除所有生成文件的命令为：
+\begin{lstlisting}
+	make clean
+\end{lstlisting}
+\par
+特别需要注意的是，该模板编译的可执行文件只能在内存中或者NOR Flash直接运行，不能烧写到NAND Flash上面运行（没有自启动功能）。
+\par
+
+% 2
+\subsection{下载文件}
+可执行文件的运行地址固定为0x37000000，也就是说必须下载到内存地址0x37000000才能正确运行。
+下载方式具体查看开发板说明书，这里只是以GT2440开发板作示范。
+\par
+上位机使用ckermit作为终端软件，开发板搭载uboot。通过串口下载程序。
+uboot启动后在ckermit上显示命令界面，输入下载命令，下载地址是0x37000000：
+\begin{lstlisting}
+	loadb 0x37000000
+\end{lstlisting}
+看到开发板等待下载的提示：
+\begin{lstlisting}
+	## Ready for binary (kermit) download to 0x37000000 at 115200 bps...
+\end{lstlisting}
+在ckermit中按组合键CTRL+$\backslash$ C退出连接进入ckermit命令界面。输入:
+\begin{lstlisting}
+	send /path/of/yours/boot.bin
+\end{lstlisting}
+其中/path/of/yours/boot.bin是烧写文件的路径。这个命令传输boot.bin文件到开发板内存0x37000000处。传输完成后，在ckermit命令界面下输入c重新连接上开发板，看到下载成功的提示：
+\begin{lstlisting}
+	## Total Size      = 0x00000374 = 884 Bytes
+	## Start Addr      = 0x37000000
+\end{lstlisting}
+输入go命令跳转到内存0x37000000处执行：
+\begin{lstlisting}
+	go 0x37000000
+\end{lstlisting}
+从程序的执行效果可以看到，模板是一个流水灯程序。
+\par
+模板编译的所有程序的下载方式都是一样的，具有相同的文件名和相同的运行地址。同样的程序可以烧写进NOR Flash里，然后从Flash中启动。由于NOR Flash中往往装有~bootloader~，烧写NOR Flash会覆盖掉~bootloader~。所以为了使用方便，不建议调试裸机程序的时候把裸机程序烧写进NOR Flash。
+
+%第二章
+\section{编程接口}
+arm9的处理器启动部分的代码千头万绪，gcc的工程管理同样晦涩难明，如果在入门阶段就去钻研启动代码和Makefile，就会陷入纷乱繁复的代码工程中无法自拔，不利于全身心的投入arm体系编程基础的学习。
+\par
+编译模板事先编写了启动部分的汇编代码和Makefile，通过提供有限的几个编程接口，使建立裸机程序的过程变得相当简单。
+\par
+启动代码，链接文件和Makfile等比较复杂的内容留到以后学习~bootloader~和内核移植的时候再来接触。
+
+% 1
+\subsection{增加源文件}
+程序头文件目录是include，所有头文件都必须放在该目录下。
+\par
+程序源代码目录是source，所有源文件都必须建立在该目录下。源文件可以是C语言，也可以是汇编语言。
+\par
+将源代码加入工程需要在编译管理文件Makefile中增加编译条件。编译条件格式为单独一行：
+\begin{lstlisting}
+	obj += filename.o
+\end{lstlisting}
+其中filename是源文件名去掉.c或者.s的后缀。例如要将自己写的abc.c文件加入工程，就在Makefile中加入obj += abc.o的一行新条件；当在顶层目录执行make all命令后，abc.c文件就会被编译进boot.bin文件。
+\par
+如果要在source目录下建立多级目录，需要在新目录下建立相应的Makefile文件。子目录的Makefile编写方法和之前的Makefile一致，同时还要在上一层目录中的Makefile中包含子目录中的Makefile。
+\par
+多级子目录举例：在source目录下建立abc目录，目录下有源文件def.c。在abc目录下建立Makefile文件，内容为：
+\begin{lstlisting}
+	obj += def.o
+\end{lstlisting}
+同时还要在source目录下的Makefile中包含abc目录下的Makefile：
+\begin{lstlisting}
+	include source/abc/Makefile
+\end{lstlisting}
+这样在顶层目录运行make all之后，def.c的内容就会被编译进boot.bin。
+
+% 2
+\subsection{C编程}
+在模板中，C语言程序的入口是main函数，标准声明格式为:
+\begin{lstlisting}
+	int main(void);
+\end{lstlisting}
+每个工程中只能有一个C语言入口函数，包含入口函数的C文件即为C代码入口文件。
+\par
+如果需要修改C程序入口函数格式，可以修改start.S文件。入口函数在汇编中的声明为：
+\begin{lstlisting}
+	_start_armboot:	.word main
+\end{lstlisting}
+将其中的main替换为相应的函数名即可改变C语言入口。
+\par
+S3C2440的寄存器地址和中断地址声明在include/2440addr.h中，其调用方式类似于MSP430的库文件调用。
+
+% 3
+\subsection{汇编编程}
+在模板中，汇编语言的格式是arm-linux汇编，与《arm体系结构与编程》的内容有着细微的差别。
+\par
+汇编函数的声明为:
+\begin{lstlisting}
+	asm_function	.word _asm_function
+	.globl		asm_function
+	_asm_function:
+		function_body
+		mov	pc, lr
+\end{lstlisting}
+声明的汇编函数可以在C文件中调用，调用前需要在C文件中声明：
+\begin{lstlisting}
+	extern void asm_function(void);
+\end{lstlisting}
+\par
+汇编文件中声明C函数的方式为
+\begin{lstlisting}
+	_c_function	.word c_function
+\end{lstlisting}
+在汇编文件中声明后的C函数能够在汇编文件中调用。C函数和汇编函数的参数传递遵循ATPCS原则。
+\par
+C及汇编的混合编程参考《arm体系结构与编程》的第八章。
+
+
+\clearpage
+\end{CJK}
+\end{document}
